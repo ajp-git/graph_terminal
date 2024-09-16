@@ -22,7 +22,8 @@ fn main() -> Result<(), anyhow::Error> {
 
     terminal
         .clear_terminal()?
-        .draw_3d_wave(5.0, 2.0, 20.0, 20.0, 0.0)?;
+        //.draw_3d_wave(5.0, 2.0, 20.0, 20.0)?;
+        .draw_donut();
 
     Ok(())
 }

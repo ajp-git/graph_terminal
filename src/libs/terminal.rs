@@ -1,6 +1,10 @@
 use anyhow::{Context, Result};
 use crossterm::{cursor::MoveTo, event, execute, queue, style::Print, terminal, ExecutableCommand};
-use std::io::{stdout, Write};
+use std::{
+    io::{stdout, Write},
+    thread::sleep,
+    time::Duration,
+};
 
 pub struct Terminal3d {
     x: u16,
@@ -16,6 +20,10 @@ impl Terminal3d {
             y,
             proportion: 0.5,
         })
+    }
+
+    pub fn get_size(&self) -> (usize, usize) {
+        (self.x as usize, self.y as usize)
     }
 
     pub fn fill_terminal(&self) -> Result<&Self> {
@@ -73,24 +81,102 @@ impl Terminal3d {
         frequency: f64,
         x: f64,
         y: f64,
-        z: f64,
     ) -> Result<&mut Terminal3d, anyhow::Error> {
         let mut stdout = stdout();
         for theta in 0..360 {
-            for phi in -90..91 {
-                let theta = theta as f64;
-                let phi = phi as f64;
-                let x_wave = x + (amplitude * theta.to_radians().sin()) * phi.to_radians().cos();
-                let y_wave = y
-                    + (amplitude * frequency * theta.to_radians().cos())
-                        * phi.to_radians().sin()
-                        * self.proportion;
-                let z_wave =
-                    z + (amplitude * frequency * theta.to_radians().sin()) * phi.to_radians().cos();
-                queue!(stdout, MoveTo(x_wave as u16, y_wave as u16), Print("*"));
-            }
+            let z_depth = (theta as f64 / 360.0) * 10.0; // simulate depth
+            let x_wave = x + (amplitude * (theta as f64).to_radians().sin()) * frequency;
+            let y_wave =
+                y + (amplitude * (theta as f64).to_radians().cos()) * frequency * self.proportion;
+            let shade = (z_depth / 10.0) * 255.0; // calculate shade based on depth
+            let shade_char = match shade as u8 {
+                0..=63 => ' ',    // dark shade
+                64..=127 => '.',  // medium shade
+                128..=191 => '*', // light shade
+                _ => '+',         // very light shade
+            };
+            queue!(
+                stdout,
+                MoveTo(x_wave as u16, y_wave as u16),
+                Print(shade_char)
+            );
         }
         stdout.flush()?;
         Ok(self)
+    }
+
+    pub fn draw_donut(&mut self) -> Result<&mut Self, anyhow::Error> {
+        let mut azimuth_angle: f64 = 0.0;
+        let mut polar_angle: f64 = 0.0;
+        self.clear_terminal()?;
+        loop {
+            let buffer_len = self.get_size().0 * self.get_size().1;
+            let mut depth_buffer = vec![0.0; buffer_len];
+            let mut pixel_values = vec![' '; buffer_len];
+
+            for theta in (0..628).step_by(7) {
+                for phi in (0..628).step_by(2) {
+                    let theta = theta as f64 / 100.0;
+                    let phi = phi as f64 / 100.0;
+                    let cosine_phi = phi.cos();
+                    let sine_theta = theta.sin();
+                    let sine_azimuth_angle = azimuth_angle.sin();
+                    let cosine_theta = theta.cos();
+                    let sine_polar_angle = polar_angle.sin();
+                    let cosine_azimuth_angle = azimuth_angle.cos();
+                    let h = cosine_theta + 2.0;
+                    let distance = 1.0
+                        / (cosine_phi * h * sine_azimuth_angle
+                            + sine_theta * cosine_azimuth_angle
+                            + 5.0);
+                    let sine_phi = phi.sin();
+                    let cosine_polar_angle = polar_angle.cos();
+                    let sine_polar_angle = polar_angle.sin();
+                    let t = cosine_phi * h * cosine_azimuth_angle - sine_theta * sine_azimuth_angle;
+                    let screen_x: usize = (self.get_size().0 as f64 / 2.0
+                        + self.get_size().0 as f64 / 2.5
+                            * distance
+                            * (sine_phi * h * cosine_polar_angle - t * sine_polar_angle))
+                        as usize;
+                    let screen_y: usize = (self.get_size().1 as f64 / 2.0
+                        + self.get_size().1 as f64 / 2.5
+                            * distance
+                            * (sine_phi * h * sine_polar_angle + t * cosine_polar_angle))
+                        as usize;
+                    let offset = screen_x + self.get_size().0 * screen_y;
+                    let illumination_index = 8.0
+                        * ((sine_theta * sine_azimuth_angle
+                            - cosine_phi * cosine_theta * cosine_azimuth_angle)
+                            * cosine_polar_angle
+                            - cosine_phi * cosine_theta * sine_azimuth_angle
+                            - sine_theta * cosine_azimuth_angle
+                            - sine_phi * cosine_theta * sine_polar_angle);
+                    if self.get_size().1 > screen_y
+                        && screen_y > 0
+                        && screen_x > 0
+                        && self.get_size().0 > screen_x
+                        && offset < depth_buffer.len()
+                        && distance > depth_buffer[offset]
+                    {
+                        depth_buffer[offset] = distance;
+                        pixel_values[offset] = ".,-~:;=!*#$@"
+                            .chars()
+                            .nth(illumination_index.max(0.0) as usize)
+                            .unwrap();
+                    }
+                }
+            }
+            self.clear_terminal();
+            for index in 0..buffer_len {
+                if index % self.get_size().0 == 0 {
+                    print!("\n");
+                } else {
+                    print!("{}", pixel_values[index]);
+                }
+                azimuth_angle += 0.000008;
+                polar_angle += 0.000005;
+            }
+            sleep(Duration::from_millis(300));
+        }
     }
 }

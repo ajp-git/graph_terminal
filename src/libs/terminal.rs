@@ -22,8 +22,10 @@ impl Terminal3d {
         let (x, y) = crossterm::terminal::size().context("Failed to get terminal size")?;
         let proportion = 0.5;
         Ok(Self {
-            x: ((x as f64 / proportion) as u16).min(y),
-            y: y.min((x as f64 / proportion) as u16),
+            /*x: ((x as f64 / proportion) as u16).min(y),
+            y: y.min((x as f64 / proportion) as u16),*/
+            x,
+            y,
             proportion,
         })
     }
@@ -121,8 +123,8 @@ impl Terminal3d {
             let mut depth_buffer = vec![0.0; buffer_len];
             let mut pixel_values = vec![0u8; buffer_len];
 
-            for theta in (0..628).step_by(7) {
-                for phi in (0..628).step_by(2) {
+            for theta in (0..628).step_by(2) {
+                for phi in (0..628).step_by(1) {
                     let theta = theta as f64 / 100.0;
                     let phi = phi as f64 / 100.0;
                     let cosine_phi = phi.cos();
@@ -131,7 +133,7 @@ impl Terminal3d {
                     let cosine_theta = theta.cos();
                     let cosine_azimuth_angle = azimuth_angle.cos();
                     let h = cosine_theta + 2.0;
-                    let distance = 0.80
+                    let distance = 0.50
                         / (cosine_phi * h * sine_azimuth_angle
                             + sine_theta * cosine_azimuth_angle
                             + 5.0);
@@ -157,7 +159,7 @@ impl Terminal3d {
                             - cosine_phi * cosine_theta * sine_azimuth_angle
                             - sine_theta * cosine_azimuth_angle
                             - sine_phi * cosine_theta * sine_polar_angle)
-                        + 256.0)
+                        + 128.0)
                         / 2.0) as u8;
                     if self.get_size().1 > screen_y
                         && screen_y > 0
@@ -203,13 +205,26 @@ impl Terminal3d {
                                 crossterm::style::Color::Black
                             ))
                         )?;
-                        queue!(stdout, Print("*"))?;
+                        queue!(stdout, Print("@"))?;
                     }
                 }
                 azimuth_angle += 0.000008;
                 polar_angle += 0.000005;
             }
             stdout.flush()?;
+            execute!(
+                stdout,
+                SetColors(Colors::new(
+                    crossterm::style::Color::White,
+                    crossterm::style::Color::Black
+                ))
+            )?;
+            stdout.flush()?;
+            println!(
+                "min {} max {}",
+                pixel_values.iter().filter(|&c| c > &0).min().unwrap(),
+                pixel_values.iter().max().unwrap()
+            );
             sleep(Duration::from_millis(200));
         }
     }

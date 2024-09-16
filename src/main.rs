@@ -16,7 +16,7 @@ struct Args {
 }
 
 fn main() -> Result<(), anyhow::Error> {
-    let args = Args::parse();
+    //let args = Args::parse();
     let mut terminal = Terminal3d::new()?;
     //terminal.draw_sample_function()?;
 

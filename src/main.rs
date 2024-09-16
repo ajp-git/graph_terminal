@@ -17,7 +17,12 @@ struct Args {
 
 fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
-    let terminal = Terminal3d::new()?;
-    terminal.fill_terminal();
+    let mut terminal = Terminal3d::new()?;
+    //terminal.draw_sample_function()?;
+
+    terminal
+        .clear_terminal()?
+        .draw_3d_wave(5.0, 2.0, 20.0, 20.0, 0.0)?;
+
     Ok(())
 }

@@ -1,5 +1,10 @@
 use anyhow::{Context, Result};
-use crossterm::{cursor::MoveTo, event, execute, queue, style::Print, terminal, ExecutableCommand};
+use crossterm::{
+    cursor::MoveTo,
+    event, execute, queue,
+    style::{Color, Colors, Print, SetColors},
+    terminal, ExecutableCommand,
+};
 use std::{
     io::{stdout, Write},
     thread::sleep,
@@ -15,10 +20,11 @@ pub struct Terminal3d {
 impl Terminal3d {
     pub fn new() -> Result<Self> {
         let (x, y) = crossterm::terminal::size().context("Failed to get terminal size")?;
+        let proportion = 0.5;
         Ok(Self {
-            x,
-            y,
-            proportion: 0.5,
+            x: ((x as f64 / proportion) as u16).min(y),
+            y: y.min((x as f64 / proportion) as u16),
+            proportion,
         })
     }
 
@@ -75,6 +81,7 @@ impl Terminal3d {
         stdout.flush()?;
         Ok(self)
     }
+
     pub fn draw_3d_wave(
         &mut self,
         amplitude: f64,
@@ -112,7 +119,7 @@ impl Terminal3d {
         loop {
             let buffer_len = self.get_size().0 * self.get_size().1;
             let mut depth_buffer = vec![0.0; buffer_len];
-            let mut pixel_values = vec![' '; buffer_len];
+            let mut pixel_values = vec![0u8; buffer_len];
 
             for theta in (0..628).step_by(7) {
                 for phi in (0..628).step_by(2) {
@@ -122,10 +129,9 @@ impl Terminal3d {
                     let sine_theta = theta.sin();
                     let sine_azimuth_angle = azimuth_angle.sin();
                     let cosine_theta = theta.cos();
-                    let sine_polar_angle = polar_angle.sin();
                     let cosine_azimuth_angle = azimuth_angle.cos();
                     let h = cosine_theta + 2.0;
-                    let distance = 1.0
+                    let distance = 0.80
                         / (cosine_phi * h * sine_azimuth_angle
                             + sine_theta * cosine_azimuth_angle
                             + 5.0);
@@ -134,23 +140,25 @@ impl Terminal3d {
                     let sine_polar_angle = polar_angle.sin();
                     let t = cosine_phi * h * cosine_azimuth_angle - sine_theta * sine_azimuth_angle;
                     let screen_x: usize = (self.get_size().0 as f64 / 2.0
-                        + self.get_size().0 as f64 / 2.5
+                        + self.get_size().0 as f64 / 1.2
                             * distance
                             * (sine_phi * h * cosine_polar_angle - t * sine_polar_angle))
                         as usize;
                     let screen_y: usize = (self.get_size().1 as f64 / 2.0
-                        + self.get_size().1 as f64 / 2.5
+                        + self.get_size().1 as f64 / 1.2
                             * distance
-                            * (sine_phi * h * sine_polar_angle + t * cosine_polar_angle))
-                        as usize;
+                            * (sine_phi * h * sine_polar_angle + t * cosine_polar_angle)
+                            * self.proportion) as usize;
                     let offset = screen_x + self.get_size().0 * screen_y;
-                    let illumination_index = 8.0
+                    let illumination_index = ((256.0
                         * ((sine_theta * sine_azimuth_angle
                             - cosine_phi * cosine_theta * cosine_azimuth_angle)
                             * cosine_polar_angle
                             - cosine_phi * cosine_theta * sine_azimuth_angle
                             - sine_theta * cosine_azimuth_angle
-                            - sine_phi * cosine_theta * sine_polar_angle);
+                            - sine_phi * cosine_theta * sine_polar_angle)
+                        + 256.0)
+                        / 2.0) as u8;
                     if self.get_size().1 > screen_y
                         && screen_y > 0
                         && screen_x > 0
@@ -159,24 +167,50 @@ impl Terminal3d {
                         && distance > depth_buffer[offset]
                     {
                         depth_buffer[offset] = distance;
-                        pixel_values[offset] = ".,-~:;=!*#$@"
-                            .chars()
-                            .nth(illumination_index.max(0.0) as usize)
-                            .unwrap();
+                        /*pixel_values[offset] = ".,-~:;=!*#$@"
+                        .chars()
+                        .nth(illumination_index.max(0.0) as usize)
+                        .unwrap();*/
+                        pixel_values[offset] = illumination_index as u8;
                     }
                 }
             }
-            self.clear_terminal();
+            //self.clear_terminal()?;
+            let mut stdout = stdout();
+
             for index in 0..buffer_len {
                 if index % self.get_size().0 == 0 {
-                    print!("\n");
+                    queue!(stdout, Print("\n"))?;
                 } else {
-                    print!("{}", pixel_values[index]);
+                    if pixel_values[index] == 0 {
+                        queue!(
+                            stdout,
+                            SetColors(Colors::new(
+                                crossterm::style::Color::Black,
+                                crossterm::style::Color::Black
+                            ))
+                        )?;
+                        queue!(stdout, Print(" "))?;
+                    } else {
+                        queue!(
+                            stdout,
+                            SetColors(Colors::new(
+                                crossterm::style::Color::Rgb {
+                                    r: pixel_values[index].max(0),
+                                    g: pixel_values[index].max(0),
+                                    b: pixel_values[index].max(0)
+                                },
+                                crossterm::style::Color::Black
+                            ))
+                        )?;
+                        queue!(stdout, Print("*"))?;
+                    }
                 }
                 azimuth_angle += 0.000008;
                 polar_angle += 0.000005;
             }
-            sleep(Duration::from_millis(300));
+            stdout.flush()?;
+            sleep(Duration::from_millis(200));
         }
     }
 }

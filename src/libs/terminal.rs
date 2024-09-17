@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use crossterm::{
-    cursor::MoveTo,
+    cursor::{self, MoveTo},
     event, execute, queue,
     style::{Color, Colors, Print, SetColors},
     terminal, ExecutableCommand,
@@ -20,7 +20,7 @@ pub struct Terminal3d {
 impl Terminal3d {
     pub fn new() -> Result<Self> {
         let (x, y) = crossterm::terminal::size().context("Failed to get terminal size")?;
-        let proportion = 0.5;
+        let proportion = 0.6;
         Ok(Self {
             /*x: ((x as f64 / proportion) as u16).min(y),
             y: y.min((x as f64 / proportion) as u16),*/
@@ -46,7 +46,7 @@ impl Terminal3d {
 
     pub fn clear_terminal(&mut self) -> Result<&mut Self, anyhow::Error> {
         let mut stdout = stdout();
-        stdout.execute(terminal::Clear(terminal::ClearType::All))?;
+        stdout.execute(cursor::MoveTo(0, 0))?;
         Ok(self)
     }
 
@@ -117,7 +117,6 @@ impl Terminal3d {
     pub fn draw_donut(&mut self) -> Result<&mut Self, anyhow::Error> {
         let mut azimuth_angle: f64 = 0.0;
         let mut polar_angle: f64 = 0.0;
-        self.clear_terminal()?;
         loop {
             let buffer_len = self.get_size().0 * self.get_size().1;
             let mut depth_buffer = vec![0.0; buffer_len];
@@ -211,21 +210,9 @@ impl Terminal3d {
                 azimuth_angle += 0.000008;
                 polar_angle += 0.000005;
             }
+            self.clear_terminal();
             stdout.flush()?;
-            execute!(
-                stdout,
-                SetColors(Colors::new(
-                    crossterm::style::Color::White,
-                    crossterm::style::Color::Black
-                ))
-            )?;
-            stdout.flush()?;
-            println!(
-                "min {} max {}",
-                pixel_values.iter().filter(|&c| c > &0).min().unwrap(),
-                pixel_values.iter().max().unwrap()
-            );
-            sleep(Duration::from_millis(200));
+            sleep(Duration::from_millis(500));
         }
     }
 }
